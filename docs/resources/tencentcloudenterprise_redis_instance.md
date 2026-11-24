@@ -15,6 +15,15 @@ Provides a resource to create a instance and set its attributes.
 
 ~> **NOTE:** Both adding and removing replications in one change is supported but not recommend.
 
+To select a resource pool, configure both `resource_name` and `resource_arch`, or omit both to leave selection to the API. Use the pool name and architecture values supported by your deployment:
+
+```hcl
+resource_name = "example-pool"
+resource_arch = "example-architecture"
+```
+
+Changing either value replaces the Redis instance. These fields are creation inputs and are not refreshed from the instance query response.
+
 ## Example Usage
 
 ```hcl
@@ -76,7 +85,9 @@ The following arguments are supported:
 * `redis_shard_num` - (Optional, Int) The number of instance shard, default is 1. This is not required for standalone and master slave versions.
 * `replica_zone_ids` - (Optional, List: [`Int`]) ID of replica nodes available zone. This is not required for standalone and master slave versions. NOTE: Removing some of the same zone of replicas (e.g. removing 100001 of [100001, 100001, 100002]) will pick the first hit to remove.
 * `replicas_read_only` - (Optional, Bool) Whether copy read-only is supported, Redis 2.8 Standard Edition and CKV Standard Edition do not support replica read-only, turn on replica read-only, the instance will automatically read and write separate, write requests are routed to the primary node, read requests are routed to the replica node, if you need to open replica read-only, the recommended number of replicas >=2.
-* `resource_pool_id` - (Optional, String, ForceNew) The ID of the resource pool to which the instance belongs.
+* `resource_pool_id` - (Optional, String, ForceNew, Deprecated) Legacy resource pool ID. It is not supported for resource pool selection in the target environment. Use `resource_name` and `resource_arch` instead. Cannot be combined with either new parameter.
+* `resource_name` - (Optional, String, ForceNew) Resource pool name. Must be specified together with `resource_arch`. Both values must contain non-whitespace characters. Changes replace the instance.
+* `resource_arch` - (Optional, String, ForceNew) Resource pool architecture. Must be specified together with `resource_name`. Changes replace the instance.
 * `tags` - (Optional, Map) Instance tags.
 
 ## Attributes Reference

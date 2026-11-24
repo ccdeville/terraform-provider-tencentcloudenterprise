@@ -62,10 +62,11 @@ import (
 
 	sdkErrors "terraform-provider-tencentcloudenterprise/sdk/common/errors"
 
-	redis "terraform-provider-tencentcloudenterprise/sdk/redis/v20180412"
-	"terraform-provider-tencentcloudenterprise/tencentcloud/internal/helper"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
+	redis "terraform-provider-tencentcloudenterprise/sdk/redis/v20180412"
+	"terraform-provider-tencentcloudenterprise/tencentcloud/internal/helper"
 )
 
 func init() {
@@ -100,6 +101,8 @@ func init() {
 			"ip":                  "IP地址",
 			"tags":                "标签",
 			"resource_pool_id":    "资源池ID",
+			"resource_name":       "资源池名称，必须与resource_arch同时配置",
+			"resource_arch":       "资源池架构，必须与resource_name同时配置",
 			"platform_project_id": "平台项目ID",
 		},
 	})
@@ -307,10 +310,30 @@ func resourceTencentCloudRedisInstance() *schema.Resource {
 				Description:  "Auto-renew flag. 0 - default state (manual renewal); 1 - automatic renewal; 2 - explicit no automatic renewal.",
 			},
 			"resource_pool_id": {
-				Type:        schema.TypeString,
-				Optional:    true,
-				ForceNew:    true,
-				Description: "The ID of the resource pool to which the instance belongs.",
+				Type:          schema.TypeString,
+				Optional:      true,
+				ForceNew:      true,
+				Description:   "The ID of the resource pool to which the instance belongs.",
+				Deprecated:    "ResourcePoolId is not supported for resource pool selection in the target environment. Use resource_name and resource_arch instead.",
+				ConflictsWith: []string{"resource_name", "resource_arch"},
+			},
+			"resource_name": {
+				Type:          schema.TypeString,
+				Optional:      true,
+				ForceNew:      true,
+				RequiredWith:  []string{"resource_arch"},
+				ConflictsWith: []string{"resource_pool_id"},
+				ValidateFunc:  validation.StringIsNotWhiteSpace,
+				Description:   "Resource pool name. Must be specified together with resource_arch. Changes replace the instance.",
+			},
+			"resource_arch": {
+				Type:          schema.TypeString,
+				Optional:      true,
+				ForceNew:      true,
+				RequiredWith:  []string{"resource_name"},
+				ConflictsWith: []string{"resource_pool_id"},
+				ValidateFunc:  validation.StringIsNotWhiteSpace,
+				Description:   "Resource pool architecture. Must be specified together with resource_name. Changes replace the instance.",
 			},
 			"platform_project_id": {
 				Type:        schema.TypeString,
@@ -398,6 +421,12 @@ func resourceTencentCloudRedisInstanceCreate(d *schema.ResourceData, meta interf
 
 	if v, ok := d.GetOk("resource_pool_id"); ok {
 		options = append(options, WithResourcePool(v.(string)))
+	}
+	if v, ok := d.GetOk("resource_name"); ok {
+		options = append(options, WithResourceName(v.(string)))
+	}
+	if v, ok := d.GetOk("resource_arch"); ok {
+		options = append(options, WithResourceArch(v.(string)))
 	}
 
 	if v, ok := d.GetOk("platform_project_id"); ok {
