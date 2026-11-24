@@ -2345,6 +2345,8 @@ type CreateInstancesRequest struct {
 	// 资源池id
 
 	ResourcePoolId *string `json:"ResourcePoolId,omitempty" name:"ResourcePoolId"`
+	// 资源池名称
+	ResourceName *string `json:"ResourceName,omitempty" name:"ResourceName"`
 	// 资源池arch
 
 	ResourceArch *string `json:"ResourceArch,omitempty" name:"ResourceArch"`
