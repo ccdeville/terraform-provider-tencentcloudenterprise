@@ -1,7 +1,7 @@
 /*
 Use this resource to create ckafka instance.
 
-~> **NOTE:** It only support create prepaid ckafka instance.
+~> **NOTE:** Instance creation uses HourCreate with postpaid billing (PayMode=0).
 
 Example Usage
 Basic Instance
@@ -214,9 +214,11 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 
 	ckafka "terraform-provider-tencentcloudenterprise/sdk/ckafka/v20190819"
 	"terraform-provider-tencentcloudenterprise/tencentcloud/internal/helper"
@@ -263,6 +265,7 @@ func init() {
 			"vport":              "访问实例的端口信息",
 			"instance_id":        "实例id",
 			"cluster_id":         "集群id",
+			"k8s_cluster_id":     "专业版实例的Kubernetes承载集群ID",
 			"pid":                "实例类型",
 			"region_id":          "地域ID",
 			"region_name":        "地域名称",
@@ -286,11 +289,15 @@ func init() {
 }
 func resourceTencentCloudCkafkaInstance() *schema.Resource {
 	return &schema.Resource{
-		Description: "Use this resource to create ckafka instance.",
-		Create:      resourceTencentCloudCkafkaInstanceCreate,
-		Read:        resourceTencentCloudCkafkaInstanceRead,
-		Update:      resourceTencentCloudCkafkaInstanceUpdate,
-		Delete:      resourceTencentCLoudCkafkaInstanceDelete,
+		Description:   "Use this resource to create ckafka instance.",
+		Create:        resourceTencentCloudCkafkaInstanceCreate,
+		Read:          resourceTencentCloudCkafkaInstanceRead,
+		Update:        resourceTencentCloudCkafkaInstanceUpdate,
+		Delete:        resourceTencentCLoudCkafkaInstanceDelete,
+		CustomizeDiff: customizeCkafkaInstanceCapacityDiff,
+		Timeouts: &schema.ResourceTimeout{
+			Update: schema.DefaultTimeout(30 * time.Minute),
+		},
 		Importer: &schema.ResourceImporter{
 			State: schema.ImportStatePassthrough,
 		},
@@ -330,6 +337,13 @@ func resourceTencentCloudCkafkaInstance() *schema.Resource {
 				ForceNew: true,
 				Description: "Cluster-ID represents  the cluster to which Ckafa belongs, " +
 					"associated with cluster_name only needs to select one of them.",
+			},
+			"k8s_cluster_id": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				ForceNew:     true,
+				ValidateFunc: validation.StringIsNotWhiteSpace,
+				Description:  "Kubernetes cluster ID used to host a professional Kafka instance. Changes replace the instance.",
 			},
 			//"specifications_type": {
 			//	Type:         schema.TypeString,
@@ -385,15 +399,12 @@ func resourceTencentCloudCkafkaInstance() *schema.Resource {
 			"band_width": {
 				Type:        schema.TypeInt,
 				Required:    true,
-				ForceNew:    true,
-				Description: "Instance bandwidth in MBps.",
+				Description: "Instance bandwidth in MB/s. Professional postpaid instances support in-place increases; standard instances are replaced when changed.",
 			},
 			"disk_size": {
-				Type:     schema.TypeInt,
-				Required: true,
-				ForceNew: true,
-				Description: "Disk Size. Its interval varies with bandwidth, and the input must be within the interval, which can be viewed through the control. " +
-					"If it is not within the interval, the plan will cause a change when first created.",
+				Type:        schema.TypeInt,
+				Required:    true,
+				Description: "Disk capacity in GB. Professional postpaid instances support in-place increases; standard instances are replaced when changed. The target must conform to the platform bandwidth and storage specification rules.",
 			},
 			"partition": {
 				Type:     schema.TypeInt,
@@ -707,6 +718,9 @@ func buildGoodsDetail(d *schema.ResourceData) *ckafka.GoodsDetail {
 
 	// 专业版
 	if pid == CkafkaProfessionPid {
+		if v, ok := d.GetOk("k8s_cluster_id"); ok {
+			goodsDetail.ExData["k8sClusterId"] = v.(string)
+		}
 		goodsDetail.SubProductCode = CkafkaSubCode_Profession
 		goodsDetail.ExData["sv_ckafka_profession_partition_package_s1"] = 0
 		goodsDetail.ExData["sv_ckafka_profession_tencentcloudenterprise_disk_disk_ssd"] = d.Get("disk_size").(int)
@@ -987,8 +1001,14 @@ func resourceTencentCloudCkafkaInstanceRead(d *schema.ResourceData, meta interfa
 			return retryError(e)
 		}
 		response = result
+		if response == nil || response.Response == nil || response.Response.Result == nil {
+			return resource.NonRetryableError(fmt.Errorf("DescribeInstanceAttributes returned no result for %s", instanceId))
+		}
 		attr := response.Response.Result
 		_ = d.Set("msg_retention_time", attr.MsgRetentionTime)
+		if err := setCkafkaInstanceQuotas(d, attr); err != nil {
+			return resource.NonRetryableError(err)
+		}
 
 		//if attr.Config != nil {
 		//	config := make([]map[string]interface{}, 0)
@@ -1041,6 +1061,13 @@ func resourceTencentCloudCkafkaInstanceUpdate(d *schema.ResourceData, meta inter
 
 	instanceId := d.Id()
 	request := ckafka.NewModifyInstanceAttributesRequest()
+	capacityChanged := d.HasChange("band_width") || d.HasChange("disk_size")
+	if capacityChanged {
+		d.Partial(true)
+		if err := updateCkafkaInstanceCapacity(ctx, d, &service); err != nil {
+			return err
+		}
+	}
 	//if d.HasChange("instance_name") {
 	//	if v, ok := d.GetOk("instance_name"); ok {
 	//		request.InstanceName = helper.String(v.(string))
@@ -1188,7 +1215,13 @@ func resourceTencentCloudCkafkaInstanceUpdate(d *schema.ResourceData, meta inter
 		}
 	}
 
-	return resourceTencentCloudCkafkaInstanceRead(d, meta)
+	if err := resourceTencentCloudCkafkaInstanceRead(d, meta); err != nil {
+		return err
+	}
+	if capacityChanged {
+		d.Partial(false)
+	}
+	return nil
 }
 
 func resourceTencentCLoudCkafkaInstanceDelete(d *schema.ResourceData, meta interface{}) error {

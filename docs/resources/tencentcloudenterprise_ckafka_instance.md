@@ -11,7 +11,13 @@ description: |-
 
 Use this resource to create ckafka instance.
 
-~> **NOTE:** It only support create prepaid ckafka instance.
+~> **NOTE:** Instance creation uses `HourCreate` with postpaid billing (`PayMode=0`).
+
+Professional postpaid instances (`pid = 1004667`) support in-place increases to `band_width` and `disk_size` using `HourModify`. Standard instances retain replacement behavior for these fields. In-place decreases are rejected. A professional upgrade queries the current instance and the old and target `DescribeOrderConfig` configurations; both billing configurations are augmented with the target resource specifications, matching the console request format. `GoodsCategoryId` is omitted because its requiredness and source have not been established for this deployment.
+
+The instance must be running, and `disk_type` and current topic/partition quotas must be available. When changing capacity, existing quotas are preserved unless a positive `topic` or `partition` value is configured; quota decreases are rejected. Topic/partition-only updates are not added by this change. Upgrade completion requires the instance to be running with the requested bandwidth, disk size and quotas; `timeouts.update` defaults to 30 minutes. An accepted `HourModify` response may contain `Result: {}`. Failed or ambiguous trade requests are not automatically resubmitted.
+
+To select a Kubernetes hosting cluster for a professional instance, set `k8s_cluster_id = "tcs-cluster"`. The value is sent as `GoodsDetail.k8sClusterId`. It is distinct from the integer `cluster_id`; changing it replaces the instance. The name and architecture of the hosting cluster are not added as configurable parameters.
 
 ## Example Usage
 
@@ -215,8 +221,8 @@ resource "tencentcloudenterprise_ckafka_instance" "kafka_instance" {
 
 The following arguments are supported:
 
-* `band_width` - (Required, Int, ForceNew) Instance bandwidth in MBps.
-* `disk_size` - (Required, Int, ForceNew) Disk Size. Its interval varies with bandwidth, and the input must be within the interval, which can be viewed through the control. If it is not within the interval, the plan will cause a change when first created.
+* `band_width` - (Required, Int) Instance bandwidth in MB/s. Professional postpaid instances support in-place increases. Changes replace standard instances.
+* `disk_size` - (Required, Int) Disk capacity in GB. Professional postpaid instances support in-place increases. Changes replace standard instances. The target must conform to the platform's bandwidth and storage specification rules.
 * `goods_num` - (Required, Int) Quantity.
 * `instance_name` - (Required, String) Instance name.
 * `pid` - (Required, Int, ForceNew) Pricing formula ID. 1-9.
@@ -238,6 +244,7 @@ The following arguments are supported:
 * `vpc_id` - (Required, String) Vpc id.
 * `zone_id` - (Required, Int) Available zone id.
 * `cluster_id` - (Optional, Int, ForceNew) Cluster-ID represents  the cluster to which Ckafa belongs, associated with cluster_name only needs to select one of them.
+* `k8s_cluster_id` - (Optional, String, ForceNew) Kubernetes hosting cluster ID for a professional instance. Nonempty, non-whitespace string. Sent as `GoodsDetail.k8sClusterId` on creation.
 * `disk_type` - (Optional, String) Type of disk. [SSD].
 * `instance_id` - (Optional, String) Ckafka instance ID.
 * `instance_type` - (Optional, String) Description of instance type. [Basic, High Performance].
