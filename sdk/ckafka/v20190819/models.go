@@ -1860,9 +1860,17 @@ type DescribeOrderConfigResponse struct {
 	*tchttp.BaseResponse
 
 	Response *struct {
+		// Order configuration and optional inquiry information.
+		Result *BillingOrderConfig `json:"Result,omitempty" name:"Result"`
 		// Unique request ID, returned on each request. You need to provide this request when locating a problem RequestId。
 		RequestId *string `json:"RequestId,omitempty" name:"RequestId"`
 	} `json:"Response"`
+}
+
+type BillingOrderConfig struct {
+	Inquiry     *string `json:"Inquiry,omitempty" name:"Inquiry"`
+	OrderConfig *string `json:"OrderConfig,omitempty" name:"OrderConfig"`
+	CategoryId  *int64  `json:"CategoryId,omitempty" name:"CategoryId"`
 }
 
 func (r *DescribeOrderConfigResponse) ToJsonString() string {
