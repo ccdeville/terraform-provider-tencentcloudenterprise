@@ -218,7 +218,7 @@ func updateCkafkaInstanceCapacity(ctx context.Context, d *schema.ResourceData, s
 	if err != nil {
 		return fmt.Errorf("query Kafka instance before upgrade: %w", err)
 	}
-	if info.PayMode == nil || *info.PayMode != 0 {
+	if info.PayMode != nil && *info.PayMode != 0 {
 		return fmt.Errorf("in-place capacity changes require a confirmed postpaid Kafka instance (PayMode=0)")
 	}
 	current, err := ckafkaCapacityFromAttributes(info)
